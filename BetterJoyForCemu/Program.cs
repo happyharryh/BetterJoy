@@ -239,7 +239,7 @@ namespace BetterJoyForCemu {
                     try {
                         for (int n = 0; n < 6; n++)
                             mac[n] = byte.Parse(enumerate.serial_number.Substring(n * 2, 2), System.Globalization.NumberStyles.HexNumber);
-                    } catch (Exception e) {
+                    } catch (Exception) {
                         // could not parse mac address
                     }
                     j[j.Count - 1].PadMacAddress = new PhysicalAddress(mac);
@@ -269,14 +269,14 @@ namespace BetterJoyForCemu {
                         if (temp.out_xbox != null) {
                             try {
                                 temp.out_xbox.Disconnect();
-                            } catch (Exception e) {
+                            } catch (Exception) {
                                 // it wasn't connected in the first place, go figure
                             }
                         }
                         if (temp.out_ds4 != null) {
                             try {
                                 temp.out_ds4.Disconnect();
-                            } catch (Exception e) {
+                            } catch (Exception) {
                                 // it wasn't connected in the first place, go figure
                             }
                         }
@@ -306,7 +306,7 @@ namespace BetterJoyForCemu {
 
                     try {
                         jc.Attach();
-                    } catch (Exception e) {
+                    } catch (Exception) {
                         jc.state = Joycon.state_.DROPPED;
                         continue;
                     }
@@ -374,12 +374,12 @@ namespace BetterJoyForCemu {
 
                         try {
                             HidCerberusService.Start();
-                        } catch (Exception e) {
+                        } catch (Exception) {
                             form.console.AppendText("Unable to start HidGuardian - everything should work fine without it, but if you need it, run the app again as an admin.\r\n");
                             useHIDG = false;
                         }
                     }
-                } catch (Exception e) {
+                } catch (Exception) {
                     form.console.AppendText("Unable to start HidGuardian - everything should work fine without it, but if you need it, install it properly as admin.\r\n");
                     useHIDG = false;
                 }
@@ -388,7 +388,7 @@ namespace BetterJoyForCemu {
                 if (Boolean.Parse(ConfigurationManager.AppSettings["PurgeWhitelist"])) {
                     try {
                         response = (HttpWebResponse)WebRequest.Create(@"http://localhost:26762/api/v1/hidguardian/whitelist/purge/").GetResponse(); // remove all programs allowed to see controller
-                    } catch (Exception e) {
+                    } catch (Exception) {
                         form.console.AppendText("Unable to purge whitelist.\r\n");
                         useHIDG = false;
                     }
@@ -396,7 +396,7 @@ namespace BetterJoyForCemu {
 
                 try {
                     response = (HttpWebResponse)WebRequest.Create(@"http://localhost:26762/api/v1/hidguardian/whitelist/add/" + pid).GetResponse(); // add BetterJoyForCemu to allowed processes 
-                } catch (Exception e) {
+                } catch (Exception) {
                     form.console.AppendText("Unable to add program to whitelist.\r\n");
                     useHIDG = false;
                 }
@@ -493,7 +493,7 @@ namespace BetterJoyForCemu {
             if (Program.useHIDG) {
                 try {
                     HttpWebResponse response = (HttpWebResponse)WebRequest.Create(@"http://localhost:26762/api/v1/hidguardian/whitelist/remove/" + pid).GetResponse();
-                } catch (Exception e) {
+                } catch (Exception) {
                     form.console.AppendText("Unable to remove program from whitelist.\r\n");
                 }
             }

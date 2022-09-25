@@ -18,10 +18,10 @@ namespace BetterJoyForCemu {
         public bool allowCalibration = Boolean.Parse(ConfigurationManager.AppSettings["AllowCalibration"]);
         public List<Button> con, loc;
         public bool calibrate;
-        public List<KeyValuePair<string, float[]>> caliData;
+        public Dictionary<string, Dictionary<string, int[]>> caliData;
         private Timer countDown;
         private int count;
-        public List<int> xG, yG, zG, xA, yA, zA;
+        public List<int> xG, yG, zG, xA, yA, zA, xS, yS, xS2, yS2;
         public bool shakeInputEnabled = Boolean.Parse(ConfigurationManager.AppSettings["EnableShakeInput"]);
         public float shakeSesitivity = float.Parse(ConfigurationManager.AppSettings["ShakeInputSensitivity"]);
         public float shakeDelay = float.Parse(ConfigurationManager.AppSettings["ShakeInputDelay"]);
@@ -35,8 +35,11 @@ namespace BetterJoyForCemu {
         public MainForm() {
             xG = new List<int>(); yG = new List<int>(); zG = new List<int>();
             xA = new List<int>(); yA = new List<int>(); zA = new List<int>();
-            caliData = new List<KeyValuePair<string, float[]>> {
-                new KeyValuePair<string, float[]>("0", new float[6] {0,0,0,-710,0,0})
+            xS = new List<int>(); yS = new List<int>(); xS2 = new List<int>(); yS2 = new List<int>();
+            caliData = new Dictionary<string, Dictionary<string, int[]>> {
+                { "active_data",  new Dictionary<string, int[]>() },
+                { "stick_cal_dz",  new Dictionary<string, int[]>() },
+                { "stick2_cal_dz",  new Dictionary<string, int[]>() }
             };
 
             InitializeComponent();
@@ -332,6 +335,7 @@ namespace BetterJoyForCemu {
         private void StartGetData() {
             this.xG.Clear(); this.yG.Clear(); this.zG.Clear();
             this.xA.Clear(); this.yA.Clear(); this.zA.Clear();
+            this.xS.Clear(); this.yS.Clear(); this.xS2.Clear(); this.yS2.Clear();
             countDown = new Timer();
             this.count = 3;
             this.calibrate = true;
@@ -361,23 +365,35 @@ namespace BetterJoyForCemu {
                 countDown.Stop();
                 this.calibrate = false;
                 string serNum = Program.mgr.j.First().serial_number;
-                int serIndex = this.findSer(serNum);
-                float[] Arr = new float[6] { 0, 0, 0, 0, 0, 0 };
-                if (serIndex == -1) {
-                    this.caliData.Add(new KeyValuePair<string, float[]>(
-                         serNum,
-                         Arr
-                    ));
-                } else {
-                    Arr = this.caliData[serIndex].Value;
-                }
                 Random rnd = new Random();
-                Arr[0] = (float)quickselect_median(this.xG, rnd.Next);
-                Arr[1] = (float)quickselect_median(this.yG, rnd.Next);
-                Arr[2] = (float)quickselect_median(this.zG, rnd.Next);
-                Arr[3] = (float)quickselect_median(this.xA, rnd.Next);
-                Arr[4] = (float)quickselect_median(this.yA, rnd.Next);
-                Arr[5] = (float)quickselect_median(this.zA, rnd.Next) - 4010; //Joycon.cs acc_sen 16384
+                this.caliData["active_data"][serNum] = new int[] {
+                    (int)quickselect_median(this.xG, rnd.Next),
+                    (int)quickselect_median(this.yG, rnd.Next),
+                    (int)quickselect_median(this.zG, rnd.Next),
+                    (int)quickselect_median(this.xA, rnd.Next),
+                    (int)quickselect_median(this.yA, rnd.Next),
+                    (int)(quickselect_median(this.zA, rnd.Next) - 4010) //Joycon.cs acc_sen 16384
+                };
+                this.caliData["stick_cal_dz"][serNum] = new int[] {
+                    Program.mgr.j.First().stickCal[0],
+                    Program.mgr.j.First().stickCal[1],
+                    (int)quickselect_median(this.xS, rnd.Next),
+                    (int)quickselect_median(this.yS, rnd.Next),
+                    Program.mgr.j.First().stickCal[4],
+                    Program.mgr.j.First().stickCal[5],
+                    Program.mgr.j.First().deadZone
+                };
+                if (Program.mgr.j.First().isPro) {
+                    this.caliData["stick2_cal_dz"][serNum] = new int[] {
+                        Program.mgr.j.First().stick2Cal[0],
+                        Program.mgr.j.First().stick2Cal[1],
+                        (int)quickselect_median(this.xS2, rnd.Next),
+                        (int)quickselect_median(this.yS2, rnd.Next),
+                        Program.mgr.j.First().stick2Cal[4],
+                        Program.mgr.j.First().stick2Cal[5],
+                        Program.mgr.j.First().deadZone2
+                    };
+                }
                 this.console.Text += "Calibration completed!!!" + "\r\n";
                 Config.SaveCaliData(this.caliData);
                 Program.mgr.j.First().getActiveData();
@@ -411,24 +427,6 @@ namespace BetterJoyForCemu {
             } else {
                 return quickselect(highs, k - lows.Count - pivots.Count, pivot_fn);
             }
-        }
-
-        public float[] activeCaliData(string serNum) {
-            for (int i = 0; i < this.caliData.Count; i++) {
-                if (this.caliData[i].Key == serNum) {
-                    return this.caliData[i].Value;
-                }
-            }
-            return this.caliData[0].Value;
-        }
-
-        private int findSer(string serNum) {
-            for (int i = 0; i < this.caliData.Count; i++) {
-                if (this.caliData[i].Key == serNum) {
-                    return i;
-                }
-            }
-            return -1;
         }
     }
 }

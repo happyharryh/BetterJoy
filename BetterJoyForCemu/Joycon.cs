@@ -104,11 +104,16 @@ namespace BetterJoyForCemu {
         private UInt16[] stick_cal = { 0, 0, 0, 0, 0, 0 };
         private UInt16 deadzone;
         private UInt16[] stick_precal = { 0, 0 };
+        public UInt16[] stickCal { get => stick_cal; }
+        public UInt16 deadZone { get => deadzone; }
 
         private byte[] stick2_raw = { 0, 0, 0 };
         private UInt16[] stick2_cal = { 0, 0, 0, 0, 0, 0 };
         private UInt16 deadzone2;
         private UInt16[] stick2_precal = { 0, 0 };
+
+        public UInt16[] stick2Cal { get => stick2_cal; }
+        public UInt16 deadZone2 { get => deadzone2; }
 
         private bool stop_polling = true;
         private bool imu_enabled = false;
@@ -226,7 +231,6 @@ namespace BetterJoyForCemu {
         private Rumble rumble_obj;
 
         private byte global_count = 0;
-        private string debug_str;
 
         // For UdpServer
         public int PadId = 0;
@@ -241,8 +245,6 @@ namespace BetterJoyForCemu {
 
         public OutputControllerXbox360 out_xbox;
         public OutputControllerDualShock4 out_ds4;
-        ushort ds4_ts = 0;
-        ulong lag;
 
         int lowFreq = Int32.Parse(ConfigurationManager.AppSettings["LowFreqRumble"]);
         int highFreq = Int32.Parse(ConfigurationManager.AppSettings["HighFreqRumble"]);
@@ -284,7 +286,7 @@ namespace BetterJoyForCemu {
 
         public Joycon(IntPtr handle_, bool imu, bool localize, float alpha, bool left, string path, string serialNum, int id = 0, bool isPro = false, bool isSnes = false, bool thirdParty = false) {
             serial_number = serialNum;
-            activeData = new float[6];
+            activeData = new float[6] { 0, 0, 0, -710, 0, 0 };
             handle = handle_;
             imu_enabled = imu;
             do_localize = localize;
@@ -319,7 +321,22 @@ namespace BetterJoyForCemu {
         }
 
         public void getActiveData() {
-            this.activeData = form.activeCaliData(serial_number);
+            if (form.caliData["active_data"].ContainsKey(serial_number)) {
+                this.activeData = form.caliData["active_data"][serial_number].Select(v => (float)v).ToArray();
+                form.AppendTextBox(String.Format("Update stick active data: {0:S}.\r\n", String.Join(",", activeData)));
+            }
+            if (form.caliData["stick_cal_dz"].ContainsKey(serial_number)) {
+                this.stick_cal = form.caliData["stick_cal_dz"][serial_number].Take(6).Select(v => (UInt16)v).ToArray();
+                this.deadzone = (UInt16)form.caliData["stick_cal_dz"][serial_number][6];
+                form.AppendTextBox(String.Format("Update stick calibration data: {0:S}, with dz {1:D}.\r\n",
+                    String.Join(",", stick_cal), deadzone));
+            }
+            if (isPro && form.caliData["stick2_cal_dz"].ContainsKey(serial_number)) {
+                this.stick2_cal = form.caliData["stick2_cal_dz"][serial_number].Take(6).Select(v => (UInt16)v).ToArray();
+                this.deadzone2 = (UInt16)form.caliData["stick2_cal_dz"][serial_number][6];
+                form.AppendTextBox(String.Format("Update stick2 calibration data: {0:S}, with dz {1:D}.\r\n",
+                    String.Join(",", stick2_cal), deadzone2));
+            }
         }
 
         public void ReceiveRumble(Xbox360FeedbackReceivedEventArgs e) {
@@ -574,7 +591,7 @@ namespace BetterJoyForCemu {
                     if (out_ds4 != null) {
                         try {
                             out_ds4.UpdateInput(MapToDualShock4Input(this));
-                        } catch (Exception e) {
+                        } catch (Exception) {
                             // ignore /shrug
                         }
                     }
@@ -584,7 +601,7 @@ namespace BetterJoyForCemu {
                 if (out_xbox != null) {
                     try {
                         out_xbox.UpdateInput(MapToXbox360Input(this));
-                    } catch (Exception e) {
+                    } catch (Exception) {
                         // ignore /shrug
                     }
                 }
@@ -1046,6 +1063,12 @@ namespace BetterJoyForCemu {
                                 break;
                         }
                     }
+                    form.xS.Add(stick_precal[0]);
+                    form.yS.Add(stick_precal[1]);
+                    if (isPro) {
+                        form.xS2.Add(stick2_precal[0]);
+                        form.yS2.Add(stick2_precal[1]);
+                    }
                 } else {
                     Int16[] offset;
                     if (isPro)
@@ -1218,7 +1241,11 @@ namespace BetterJoyForCemu {
             stick_cal[isLeft ? 4 : 0] = (UInt16)((buf_[7] << 8) & 0xF00 | buf_[6]); // X Axis Min below center
             stick_cal[isLeft ? 5 : 1] = (UInt16)((buf_[8] << 4) | (buf_[7] >> 4));  // Y Axis Min below center
 
-            PrintArray(stick_cal, len: 6, start: 0, format: "Stick calibration data: {0:S}");
+            buf_ = ReadSPI(0x60, (isLeft ? (byte)0x86 : (byte)0x98), 16);
+            deadzone = (UInt16)((buf_[4] << 8) & 0xF00 | buf_[3]);
+
+            form.AppendTextBox(String.Format("Stick calibration data: {0:S}, with dz {1:D}.\r\n",
+                String.Join(",", stick_cal), deadzone));
 
             if (isPro) {
                 buf_ = ReadSPI(0x80, (!isLeft ? (byte)0x12 : (byte)0x1d), 9); // get user calibration data if possible
@@ -1241,14 +1268,12 @@ namespace BetterJoyForCemu {
                 stick2_cal[!isLeft ? 4 : 0] = (UInt16)((buf_[7] << 8) & 0xF00 | buf_[6]); // X Axis Min below center
                 stick2_cal[!isLeft ? 5 : 1] = (UInt16)((buf_[8] << 4) | (buf_[7] >> 4));  // Y Axis Min below center
 
-                PrintArray(stick2_cal, len: 6, start: 0, format: "Stick calibration data: {0:S}");
-
                 buf_ = ReadSPI(0x60, (!isLeft ? (byte)0x86 : (byte)0x98), 16);
                 deadzone2 = (UInt16)((buf_[4] << 8) & 0xF00 | buf_[3]);
-            }
 
-            buf_ = ReadSPI(0x60, (isLeft ? (byte)0x86 : (byte)0x98), 16);
-            deadzone = (UInt16)((buf_[4] << 8) & 0xF00 | buf_[3]);
+                form.AppendTextBox(String.Format("Stick2 calibration data: {0:S}, with dz {1:D}.\r\n",
+                    String.Join(",", stick2_cal), deadzone2));
+            }
 
             buf_ = ReadSPI(0x80, 0x28, 10);
             acc_neutral[0] = (Int16)(buf_[0] | ((buf_[1] << 8) & 0xff00));
